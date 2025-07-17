@@ -138,7 +138,8 @@ class GoogleDriveProvider(StorageProvider):
     
     def _manual_oauth_flow(self, flow):
         """Ejecuta flujo OAuth manual para VPS/servidores"""
-        # Para servidores sin navegador
+        # Para servidores sin navegador - configurar redirect_uri apropiado
+        flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
         auth_url, _ = flow.authorization_url(prompt='consent')
         
         print("\n" + "="*60)
