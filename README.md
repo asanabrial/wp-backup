@@ -194,22 +194,6 @@ git pull origin main
     cat crontab-examples.txt
     ```
 
-### Windows (usando backup-cron.bat)
-
-1. **Probar manualmente:**
-
-    ```cmd
-    backup-cron.bat
-    backup-cron.bat .env.local
-    ```
-
-2. **Configurar Programador de tareas:**
-    - Abrir "Programador de tareas"
-    - Crear tarea básica
-    - Programa: `cmd.exe`
-    - Argumentos: `/c "C:\ruta\completa\backup-cron.bat"`
-    - Configurar frecuencia deseada
-
 ### 📊 Logs automáticos
 
 Los scripts generan logs automáticamente en `logs/backup-YYYYMMDD-HHMMSS.log`:
