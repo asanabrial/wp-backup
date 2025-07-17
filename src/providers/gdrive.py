@@ -101,8 +101,26 @@ class GoogleDriveProvider(StorageProvider):
                 str(self.config.credentials_file), self.SCOPES
             )
             
-            # Ejecutar flujo en consola
-            creds = flow.run_console()
+            # Ejecutar flujo OAuth 2.0
+            try:
+                # Intentar con servidor local (más moderno)
+                self.logger.info("Attempting OAuth with local server...")
+                creds = flow.run_local_server(port=0)
+            except Exception as local_error:
+                # Fallback a método manual si no hay navegador/puerto
+                self.logger.warning(f"Local server OAuth failed: {local_error}")
+                self.logger.info("Trying manual authorization flow...")
+                try:
+                    # Para servidores sin navegador
+                    auth_url, _ = flow.authorization_url(prompt='consent')
+                    self.logger.info(f"Please visit this URL to authorize the application:")
+                    print(f"\n{auth_url}\n")
+                    code = input("Enter the authorization code: ").strip()
+                    flow.fetch_token(code=code)
+                    creds = flow.credentials
+                except Exception as manual_error:
+                    self.logger.error(f"Manual OAuth also failed: {manual_error}")
+                    return False
             
             # Guardar token para uso futuro
             with open(self.TOKEN_FILE, 'wb') as token:
