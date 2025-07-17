@@ -57,6 +57,19 @@ wp-backup init
     SHARE_EMAILS=tu@email.com
     ```
 
+    **🗂️ Carpetas anidadas en Google Drive:**
+
+    ```bash
+    # Crea estructura: backup/ > pequeaprendices.com/
+    GDRIVE_FOLDER=backup/pequeaprendices.com
+
+    # Crea estructura: clientes/ > 2025/ > proyecto1/
+    GDRIVE_FOLDER=clientes/2025/proyecto1
+
+    # Una sola carpeta (comportamiento anterior)
+    GDRIVE_FOLDER=WP-Backups
+    ```
+
 3. **Configura Google Drive:**
 
     - Ve a [Google Cloud Console](https://console.cloud.google.com/)
@@ -142,6 +155,79 @@ wp-backup security-scan
 # Si hay errores de módulos faltantes, actualiza el repo
 git pull origin main
 ```
+
+## 🕒 Automatización con Cron
+
+### Linux/macOS (usando backup-cron.sh)
+
+1. **Hacer el script ejecutable:**
+   ```bash
+   chmod +x backup-cron.sh
+   ```
+
+2. **Probar manualmente:**
+   ```bash
+   # Usar configuración por defecto (.env.local)
+   ./backup-cron.sh
+   
+   # Usar configuración específica
+   ./backup-cron.sh .env.produccion
+   ```
+
+3. **Configurar crontab:**
+   ```bash
+   # Editar crontab
+   crontab -e
+   
+   # Backup diario a las 2:00 AM
+   0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh
+   
+   # Con configuración específica
+   0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh .env.produccion
+   ```
+
+4. **Ver ejemplos de configuración:**
+   ```bash
+   cat crontab-examples.txt
+   ```
+
+### Windows (usando backup-cron.bat)
+
+1. **Probar manualmente:**
+   ```cmd
+   backup-cron.bat
+   backup-cron.bat .env.local
+   ```
+
+2. **Configurar Programador de tareas:**
+   - Abrir "Programador de tareas"
+   - Crear tarea básica
+   - Programa: `cmd.exe`
+   - Argumentos: `/c "C:\ruta\completa\backup-cron.bat"`
+   - Configurar frecuencia deseada
+
+### 📊 Logs automáticos
+
+Los scripts generan logs automáticamente en `logs/backup-YYYYMMDD-HHMMSS.log`:
+
+```bash
+# Ver último log
+ls -la logs/backup-*.log | tail -1
+
+# Seguir log en tiempo real
+tail -f logs/backup-$(date +%Y%m%d)*.log
+
+# Limpiar logs antiguos (se hace automáticamente)
+find logs/ -name "backup-*.log" -mtime +30 -delete
+```
+
+### 🔒 Características de seguridad
+
+- **Lock file**: Previene múltiples ejecuciones simultáneas
+- **Timeout**: Evita que el proceso se cuelgue indefinidamente
+- **Logging completo**: Registro detallado de cada operación
+- **Limpieza automática**: Logs antiguos se eliminan automáticamente
+- **Verificaciones**: Valida entorno antes de ejecutar
 
 ## Contribuir
 
