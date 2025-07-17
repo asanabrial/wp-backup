@@ -1,10 +1,27 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
+*.py[cod]
 *$py.class
 
 # C extensions
 *.so
+
+# Project specific - SECURITY CRITICAL
+config/*
+!config/.gitkeep
+*.log
+token.pickle
+.env
+.env.local
+.env.*.local
+*credentials*.json
+*secret*
+*password*
+
+# Backup files
+backup_*.tar.gz
+*.sql
+*.sql.gz
 
 # Distribution / packaging
 .Python
