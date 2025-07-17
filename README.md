@@ -60,6 +60,7 @@ wp-backup init
 3. **Configura Google Drive:**
     - Ve a [Google Cloud Console](https://console.cloud.google.com/)
     - Crea credenciales OAuth 2.0 para "Desktop application"
+    - **En "OAuth consent screen" > "Test users"**: Agrega tu email
     - Descarga el JSON y ponlo en `config/gdrive-credentials.json`
     - **En VPS**: La primera vez pedirá autorización manual (copia/pega URL)
 
@@ -96,6 +97,16 @@ src/
 -   Cuenta de Google Drive
 
 ## ¿Problemas?
+
+### Error común: "Acceso bloqueado: no ha completado el proceso de verificación"
+
+```
+Error 403: access_denied
+```
+
+**Solución:** En Google Cloud Console > OAuth consent screen > Test users: Agrega tu email
+
+### Otros problemas:
 
 ```bash
 # Si algo falla, revisa la configuración

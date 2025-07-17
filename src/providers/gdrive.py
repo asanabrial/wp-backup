@@ -119,7 +119,15 @@ class GoogleDriveProvider(StorageProvider):
                     flow.fetch_token(code=code)
                     creds = flow.credentials
                 except Exception as manual_error:
-                    self.logger.error(f"Manual OAuth also failed: {manual_error}")
+                    error_msg = str(manual_error).lower()
+                    if "access_denied" in error_msg or "403" in error_msg:
+                        self.logger.error("❌ OAuth access denied (Error 403)")
+                        self.logger.info("💡 This usually means:")
+                        self.logger.info("   • Your email is not added as a test user")
+                        self.logger.info("   • Go to Google Cloud Console > OAuth consent screen")
+                        self.logger.info("   • Add your email in 'Test users' section")
+                    else:
+                        self.logger.error(f"Manual OAuth failed: {manual_error}")
                     return False
             
             # Guardar token para uso futuro
@@ -144,7 +152,8 @@ class GoogleDriveProvider(StorageProvider):
         self.logger.info("   4. Create OAuth 2.0 credentials:")
         self.logger.info("      • Application type: Desktop application")
         self.logger.info("      • Download JSON file")
-        self.logger.info("   5. Save JSON as config/gdrive-credentials.json")
+        self.logger.info("   5. In 'OAuth consent screen' > 'Test users': Add your email")
+        self.logger.info("   6. Save JSON as config/gdrive-credentials.json")
     
     def _test_connection(self) -> bool:
         """Prueba conexión con Google Drive"""
