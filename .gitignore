@@ -11,9 +11,8 @@ config/*
 !config/.gitkeep
 *.log
 token.pickle
-.env
-.env.local
-.env.*.local
+.env.local*
+!.env.example
 *credentials*.json
 *secret*
 *password*

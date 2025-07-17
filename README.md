@@ -23,7 +23,7 @@ wp-backup init
 1. **Copia el archivo de ejemplo:**
 
     ```bash
-    cp .env.local.example .env.local
+    cp .env.example .env.local
     ```
 
 2. **Edita `.env.local` con tus datos:**
