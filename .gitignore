@@ -14,8 +14,13 @@ token.pickle
 .env.local*
 !.env.example
 *credentials*.json
-*secret*
+*secret*.json
+*secret*.txt
+*secret*.key
 *password*
+
+# Allow security module files
+!src/security/secrets.py
 
 # Virtual environment
 venv/
