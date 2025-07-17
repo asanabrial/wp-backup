@@ -161,50 +161,54 @@ git pull origin main
 ### Linux/macOS (usando backup-cron.sh)
 
 1. **Hacer el script ejecutable:**
-   ```bash
-   chmod +x backup-cron.sh
-   ```
+
+    ```bash
+    chmod +x backup-cron.sh
+    ```
 
 2. **Probar manualmente:**
-   ```bash
-   # Usar configuración por defecto (.env.local)
-   ./backup-cron.sh
-   
-   # Usar configuración específica
-   ./backup-cron.sh .env.produccion
-   ```
+
+    ```bash
+    # Usar configuración por defecto (.env.local)
+    ./backup-cron.sh
+
+    # Usar configuración específica
+    ./backup-cron.sh .env.produccion
+    ```
 
 3. **Configurar crontab:**
-   ```bash
-   # Editar crontab
-   crontab -e
-   
-   # Backup diario a las 2:00 AM
-   0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh
-   
-   # Con configuración específica
-   0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh .env.produccion
-   ```
+
+    ```bash
+    # Editar crontab
+    crontab -e
+
+    # Backup diario a las 2:00 AM
+    0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh
+
+    # Con configuración específica
+    0 2 * * * /ruta/completa/a/wp-backup/backup-cron.sh .env.produccion
+    ```
 
 4. **Ver ejemplos de configuración:**
-   ```bash
-   cat crontab-examples.txt
-   ```
+    ```bash
+    cat crontab-examples.txt
+    ```
 
 ### Windows (usando backup-cron.bat)
 
 1. **Probar manualmente:**
-   ```cmd
-   backup-cron.bat
-   backup-cron.bat .env.local
-   ```
+
+    ```cmd
+    backup-cron.bat
+    backup-cron.bat .env.local
+    ```
 
 2. **Configurar Programador de tareas:**
-   - Abrir "Programador de tareas"
-   - Crear tarea básica
-   - Programa: `cmd.exe`
-   - Argumentos: `/c "C:\ruta\completa\backup-cron.bat"`
-   - Configurar frecuencia deseada
+    - Abrir "Programador de tareas"
+    - Crear tarea básica
+    - Programa: `cmd.exe`
+    - Argumentos: `/c "C:\ruta\completa\backup-cron.bat"`
+    - Configurar frecuencia deseada
 
 ### 📊 Logs automáticos
 
@@ -223,11 +227,11 @@ find logs/ -name "backup-*.log" -mtime +30 -delete
 
 ### 🔒 Características de seguridad
 
-- **Lock file**: Previene múltiples ejecuciones simultáneas
-- **Timeout**: Evita que el proceso se cuelgue indefinidamente
-- **Logging completo**: Registro detallado de cada operación
-- **Limpieza automática**: Logs antiguos se eliminan automáticamente
-- **Verificaciones**: Valida entorno antes de ejecutar
+-   **Lock file**: Previene múltiples ejecuciones simultáneas
+-   **Timeout**: Evita que el proceso se cuelgue indefinidamente
+-   **Logging completo**: Registro detallado de cada operación
+-   **Limpieza automática**: Logs antiguos se eliminan automáticamente
+-   **Verificaciones**: Valida entorno antes de ejecutar
 
 ## Contribuir
 

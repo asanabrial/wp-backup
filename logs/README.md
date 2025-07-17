@@ -4,8 +4,8 @@ Este directorio contiene los logs automáticos generados por los scripts de cron
 
 ## Estructura de archivos
 
-- `backup-YYYYMMDD-HHMMSS.log` - Logs de cada ejecución del backup
-- Los logs se limpian automáticamente después de 30 días
+-   `backup-YYYYMMDD-HHMMSS.log` - Logs de cada ejecución del backup
+-   Los logs se limpian automáticamente después de 30 días
 
 ## Ejemplo de contenido
 
