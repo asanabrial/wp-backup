@@ -102,6 +102,9 @@ wp-backup test
 
 # Verifica que no hay secretos en el código
 wp-backup security-scan
+
+# Si hay errores de módulos faltantes, actualiza el repo
+git pull origin main
 ```
 
 ## Contribuir
