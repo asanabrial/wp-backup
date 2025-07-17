@@ -62,7 +62,13 @@ wp-backup init
     - Crea credenciales OAuth 2.0 para "Desktop application"
     - **En "OAuth consent screen" > "Test users"**: Agrega tu email
     - Descarga el JSON y ponlo en `config/gdrive-credentials.json`
-    - **En VPS**: La primera vez pedirá autorización manual (copia/pega URL)
+    
+    **🔐 En VPS (autorización manual):**
+    - La herramienta mostrará una URL
+    - Ábrela en tu navegador (desde tu PC)
+    - Autoriza la aplicación
+    - Copia el código que aparece en pantalla
+    - Pégalo en el VPS
 
 ## Uso
 
@@ -105,6 +111,22 @@ Error 403: access_denied
 ```
 
 **Solución:** En Google Cloud Console > OAuth consent screen > Test users: Agrega tu email
+
+### Error: "Unable to connect" o "Firefox can't establish a connection to localhost"
+
+Esto es **normal en VPS/servidores remotos**. El sistema intentará primero abrir un servidor local pero fallará (como debe ser). Automáticamente cambiará al flujo manual donde te dará una URL para autorizar desde tu navegador.
+
+### Error: "¿De dónde saco el authorization code?"
+
+Cuando autorices en el navegador, verás una página como esta:
+
+```
+Please copy this code, switch to your application and paste it there:
+
+4/0AX4XfWi_example_code_here...
+```
+
+Copia TODO el código (empieza con `4/0A...`) y pégalo en el VPS.
 
 ### Otros problemas:
 

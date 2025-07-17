@@ -108,14 +108,54 @@ class GoogleDriveProvider(StorageProvider):
                 creds = flow.run_local_server(port=0)
             except Exception as local_error:
                 # Fallback a método manual si no hay navegador/puerto
-                self.logger.warning(f"Local server OAuth failed: {local_error}")
-                self.logger.info("Trying manual authorization flow...")
+                error_msg = str(local_error).lower()
+                if "connection" in error_msg or "port" in error_msg or "localhost" in error_msg:
+                    self.logger.info("⚠️ Local server not accessible (normal for VPS/remote servers)")
+                else:
+                    self.logger.warning(f"Local server OAuth failed: {local_error}")
+                
+                self.logger.info("🔄 Switching to manual authorization flow...")
                 try:
                     # Para servidores sin navegador
                     auth_url, _ = flow.authorization_url(prompt='consent')
-                    self.logger.info(f"Please visit this URL to authorize the application:")
-                    print(f"\n{auth_url}\n")
-                    code = input("Enter the authorization code: ").strip()
+                    
+                    print("\n" + "="*60)
+                    print("🔐 GOOGLE DRIVE AUTHORIZATION REQUIRED")
+                    print("="*60)
+                    print("⚠️ VPS/Remote server detected - using manual authorization")
+                    print()
+                    print("📱 On your computer/phone:")
+                    print(f"   1. Open: {auth_url}")
+                    print("   2. Sign in with Google")
+                    print("   3. Click 'Allow'")
+                    print()
+                    print("💻 After authorization, you'll see:")
+                    print("   ┌─────────────────────────────────────┐")
+                    print("   │ Please copy this code, switch to    │")
+                    print("   │ your application and paste it there:│")
+                    print("   │                                     │")
+                    print("   │ 4/0AX4XfWi_example_code_here...     │")
+                    print("   └─────────────────────────────────────┘")
+                    print()
+                    print("🔐 Copy the ENTIRE code (starts with 4/0A...)")
+                    print("💡 Tip: Use Ctrl+A to select all, then Ctrl+C to copy")
+                    print("="*60)
+                    
+                    code = input("\nEnter the authorization code: ").strip()
+                    
+                    if not code:
+                        self.logger.error("❌ No authorization code provided")
+                        return False
+                    
+                    if not code.startswith("4/"):
+                        self.logger.warning("⚠️ Authorization code should start with '4/'")
+                        self.logger.info("   Make sure you copied the complete code")
+                    
+                    if len(code) < 20:
+                        self.logger.warning("⚠️ Authorization code seems too short")
+                        self.logger.info("   Make sure you copied the complete code")
+                    
+                    self.logger.info("🔄 Processing authorization code...")
                     flow.fetch_token(code=code)
                     creds = flow.credentials
                 except Exception as manual_error:
