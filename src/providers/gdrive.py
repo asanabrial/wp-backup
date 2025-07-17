@@ -275,38 +275,51 @@ class GoogleDriveProvider(StorageProvider):
             return None
     
     def _find_or_create_backup_folder(self) -> Optional[str]:
-        """Encuentra o crea carpeta de backup"""
+        """Encuentra o crea estructura de carpetas de backup (soporta rutas anidadas)"""
         try:
-            # Buscar carpeta existente
-            results = self.service.files().list(
-                q=f"name='{self.config.folder}' and mimeType='application/vnd.google-apps.folder'",
-                fields="files(id, name)"
-            ).execute()
+            # Dividir la ruta en partes para manejar carpetas anidadas
+            folder_parts = self.config.folder.strip('/').split('/')
+            current_parent_id = 'root'  # Empezar desde la raíz
             
-            folders = results.get('files', [])
+            self.logger.info(f"Creating folder structure: {' > '.join(folder_parts)}")
             
-            if folders:
-                folder_id = folders[0]['id']
-                self.logger.success(f"Backup folder found: '{self.config.folder}'")
-                return folder_id
-            else:
-                # Crear nueva carpeta
-                self.logger.progress(f"Creating backup folder: '{self.config.folder}'...", "📁")
+            # Crear o encontrar cada carpeta en la jerarquía
+            for i, folder_name in enumerate(folder_parts):
+                folder_path = '/'.join(folder_parts[:i+1])
                 
-                folder_metadata = {
-                    'name': self.config.folder,
-                    'mimeType': 'application/vnd.google-apps.folder'
-                }
-                
-                folder = self.service.files().create(
-                    body=folder_metadata,
-                    fields='id'
+                # Buscar si la carpeta ya existe en el parent actual
+                query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and '{current_parent_id}' in parents"
+                results = self.service.files().list(
+                    q=query,
+                    fields="files(id, name)"
                 ).execute()
                 
-                folder_id = folder.get('id')
-                self.logger.success(f"Backup folder created: '{self.config.folder}'")
+                folders = results.get('files', [])
                 
-                return folder_id
+                if folders:
+                    # Carpeta existe
+                    current_parent_id = folders[0]['id']
+                    self.logger.info(f"   📁 Found: {folder_path}")
+                else:
+                    # Crear nueva carpeta
+                    self.logger.progress(f"Creating folder: {folder_path}...", "📁")
+                    
+                    folder_metadata = {
+                        'name': folder_name,
+                        'mimeType': 'application/vnd.google-apps.folder',
+                        'parents': [current_parent_id]
+                    }
+                    
+                    folder = self.service.files().create(
+                        body=folder_metadata,
+                        fields='id'
+                    ).execute()
+                    
+                    current_parent_id = folder.get('id')
+                    self.logger.success(f"   📁 Created: {folder_path}")
+            
+            self.logger.success(f"Backup folder structure ready: '{self.config.folder}'")
+            return current_parent_id
                 
         except Exception as e:
             self.logger.error(f"Error managing backup folder: {e}")
