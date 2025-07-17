@@ -102,74 +102,27 @@ class GoogleDriveProvider(StorageProvider):
             )
             
             # Ejecutar flujo OAuth 2.0
-            try:
-                # Intentar con servidor local (más moderno)
-                self.logger.info("Attempting OAuth with local server...")
-                creds = flow.run_local_server(port=0)
-            except Exception as local_error:
-                # Fallback a método manual si no hay navegador/puerto
-                error_msg = str(local_error).lower()
-                if "connection" in error_msg or "port" in error_msg or "localhost" in error_msg:
-                    self.logger.info("⚠️ Local server not accessible (normal for VPS/remote servers)")
-                else:
-                    self.logger.warning(f"Local server OAuth failed: {local_error}")
-                
-                self.logger.info("🔄 Switching to manual authorization flow...")
-                try:
-                    # Para servidores sin navegador
-                    auth_url, _ = flow.authorization_url(prompt='consent')
-                    
-                    print("\n" + "="*60)
-                    print("🔐 GOOGLE DRIVE AUTHORIZATION REQUIRED")
-                    print("="*60)
-                    print("⚠️ VPS/Remote server detected - using manual authorization")
-                    print()
-                    print("📱 On your computer/phone:")
-                    print(f"   1. Open: {auth_url}")
-                    print("   2. Sign in with Google")
-                    print("   3. Click 'Allow'")
-                    print()
-                    print("💻 After authorization, you'll see:")
-                    print("   ┌─────────────────────────────────────┐")
-                    print("   │ Please copy this code, switch to    │")
-                    print("   │ your application and paste it there:│")
-                    print("   │                                     │")
-                    print("   │ 4/0AX4XfWi_example_code_here...     │")
-                    print("   └─────────────────────────────────────┘")
-                    print()
-                    print("🔐 Copy the ENTIRE code (starts with 4/0A...)")
-                    print("💡 Tip: Use Ctrl+A to select all, then Ctrl+C to copy")
-                    print("="*60)
-                    
-                    code = input("\nEnter the authorization code: ").strip()
-                    
-                    if not code:
-                        self.logger.error("❌ No authorization code provided")
-                        return False
-                    
-                    if not code.startswith("4/"):
-                        self.logger.warning("⚠️ Authorization code should start with '4/'")
-                        self.logger.info("   Make sure you copied the complete code")
-                    
-                    if len(code) < 20:
-                        self.logger.warning("⚠️ Authorization code seems too short")
-                        self.logger.info("   Make sure you copied the complete code")
-                    
-                    self.logger.info("🔄 Processing authorization code...")
-                    flow.fetch_token(code=code)
-                    creds = flow.credentials
-                except Exception as manual_error:
-                    error_msg = str(manual_error).lower()
-                    if "access_denied" in error_msg or "403" in error_msg:
-                        self.logger.error("❌ OAuth access denied (Error 403)")
-                        self.logger.info("💡 This usually means:")
-                        self.logger.info("   • Your email is not added as a test user")
-                        self.logger.info("   • Go to Google Cloud Console > OAuth consent screen")
-                        self.logger.info("   • Add your email in 'Test users' section")
-                    else:
-                        self.logger.error(f"Manual OAuth failed: {manual_error}")
-                    return False
+            # Detectar si estamos en VPS/servidor (sin DISPLAY)
+            is_server = not os.environ.get('DISPLAY') and not os.environ.get('WAYLAND_DISPLAY')
             
+            if is_server:
+                self.logger.info("🖥️ Server environment detected - using manual authorization")
+                creds = self._manual_oauth_flow(flow)
+            else:
+                try:
+                    # Intentar con servidor local en entornos de escritorio
+                    self.logger.info("Attempting OAuth with local server...")
+                    creds = flow.run_local_server(port=0)
+                except Exception as local_error:
+                    # Fallback a método manual
+                    error_msg = str(local_error).lower()
+                    if any(x in error_msg for x in ["connection", "port", "localhost", "timeout", "refused", "server"]):
+                        self.logger.info("⚠️ Local server not accessible - switching to manual flow")
+                    else:
+                        self.logger.warning(f"Local server OAuth failed: {local_error}")
+                    
+                    self.logger.info("🔄 Switching to manual authorization flow...")
+                    creds = self._manual_oauth_flow(flow)
             # Guardar token para uso futuro
             with open(self.TOKEN_FILE, 'wb') as token:
                 pickle.dump(creds, token)
@@ -182,6 +135,63 @@ class GoogleDriveProvider(StorageProvider):
         except Exception as e:
             self.logger.error(f"OAuth flow failed: {e}")
             return False
+    
+    def _manual_oauth_flow(self, flow):
+        """Ejecuta flujo OAuth manual para VPS/servidores"""
+        # Para servidores sin navegador
+        auth_url, _ = flow.authorization_url(prompt='consent')
+        
+        print("\n" + "="*60)
+        print("🔐 GOOGLE DRIVE AUTHORIZATION REQUIRED")
+        print("="*60)
+        print("⚠️ VPS/Remote server detected - using manual authorization")
+        print()
+        print("📱 On your computer/phone:")
+        print(f"   1. Open: {auth_url}")
+        print("   2. Sign in with Google")
+        print("   3. Click 'Allow'")
+        print()
+        print("💻 After authorization, you'll see:")
+        print("   ┌─────────────────────────────────────┐")
+        print("   │ Please copy this code, switch to    │")
+        print("   │ your application and paste it there:│")
+        print("   │                                     │")
+        print("   │ 4/0AX4XfWi_example_code_here...     │")
+        print("   └─────────────────────────────────────┘")
+        print()
+        print("🔐 Copy the ENTIRE code (starts with 4/0A...)")
+        print("💡 Tip: Use Ctrl+A to select all, then Ctrl+C to copy")
+        print("="*60)
+        
+        code = input("\nEnter the authorization code: ").strip()
+        
+        if not code:
+            self.logger.error("❌ No authorization code provided")
+            raise Exception("No authorization code provided")
+        
+        if not code.startswith("4/"):
+            self.logger.warning("⚠️ Authorization code should start with '4/'")
+            self.logger.info("   Make sure you copied the complete code")
+        
+        if len(code) < 20:
+            self.logger.warning("⚠️ Authorization code seems too short")
+            self.logger.info("   Make sure you copied the complete code")
+        
+        self.logger.info("🔄 Processing authorization code...")
+        try:
+            flow.fetch_token(code=code)
+            return flow.credentials
+        except Exception as manual_error:
+            error_msg = str(manual_error).lower()
+            if "access_denied" in error_msg or "403" in error_msg:
+                self.logger.error("❌ OAuth access denied (Error 403)")
+                self.logger.info("💡 This usually means:")
+                self.logger.info("   • Your email is not added as a test user")
+                self.logger.info("   • Go to Google Cloud Console > OAuth consent screen")
+                self.logger.info("   • Add your email in 'Test users' section")
+            else:
+                self.logger.error(f"Manual OAuth failed: {manual_error}")
+            raise manual_error
     
     def _show_oauth_setup_help(self):
         """Muestra ayuda para configurar OAuth 2.0"""

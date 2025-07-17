@@ -58,12 +58,14 @@ wp-backup init
     ```
 
 3. **Configura Google Drive:**
+
     - Ve a [Google Cloud Console](https://console.cloud.google.com/)
     - Crea credenciales OAuth 2.0 para "Desktop application"
     - **En "OAuth consent screen" > "Test users"**: Agrega tu email
     - Descarga el JSON y ponlo en `config/gdrive-credentials.json`
-    
+
     **🔐 En VPS (autorización manual):**
+
     - La herramienta mostrará una URL
     - Ábrela en tu navegador (desde tu PC)
     - Autoriza la aplicación
