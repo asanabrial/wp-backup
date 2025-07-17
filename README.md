@@ -11,14 +11,37 @@ Una herramienta sencilla y **segura** para hacer backups de WordPress y subirlos
 
 ## Instalación rápida
 
+### Opción 1: Script automático (recomendado)
+
 ```bash
 git clone <este-repo>
 cd wp-backup
+chmod +x install.sh
+./install.sh
+```
+
+### Opción 2: Manual
+
+```bash
+git clone <este-repo>
+cd wp-backup
+
+# Crear entorno virtual
+python3 -m venv venv
+source venv/bin/activate
+
+# Instalar
 pip install -e .
 wp-backup init
 ```
 
 ## Configuración
+
+> **⚠️ Importante:** Si usas entorno virtual, actívalo antes de usar la herramienta:
+>
+> ```bash
+> source venv/bin/activate
+> ```
 
 1. **Copia el archivo de ejemplo:**
 

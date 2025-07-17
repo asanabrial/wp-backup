@@ -1,0 +1,12 @@
+# Git attributes for WordPress Backup Tool
+
+# Shell scripts should have LF line endings
+*.sh text eol=lf
+
+# Python files should have LF line endings  
+*.py text eol=lf
+
+# Config files
+*.toml text eol=lf
+*.env text eol=lf
+*.md text eol=lf

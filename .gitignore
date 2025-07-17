@@ -17,6 +17,11 @@ token.pickle
 *secret*
 *password*
 
+# Virtual environment
+venv/
+env/
+.venv/
+
 # Backup files
 backup_*.tar.gz
 *.sql
