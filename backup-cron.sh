@@ -87,6 +87,30 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+# Función para verificar autenticación de Google Drive
+check_google_auth() {
+    log_info "Checking Google Drive authentication..."
+    
+    # Verificar si existe token
+    if [ ! -f "token.pickle" ]; then
+        log_error "Google Drive token not found!"
+        log_info "You need to run OAuth setup first:"
+        log_info "  wp-backup test"
+        log_info "This will complete the OAuth flow and create token.pickle"
+        return 1
+    fi
+    
+    # Verificar si el token funciona (test rápido sin output)
+    if timeout 60 wp-backup test --config-file "$CONFIG_FILE" >/dev/null 2>&1; then
+        log_success "Google Drive authentication verified"
+        return 0
+    else
+        log_warning "Google Drive token may be expired or invalid"
+        log_info "Try running: wp-backup test --config-file $CONFIG_FILE"
+        return 1
+    fi
+}
+
 # Verificar entorno virtual
 if [ -d "venv" ]; then
     log_info "Activating virtual environment..."
@@ -112,11 +136,26 @@ if [ -f "$CONFIG_FILE" ]; then
     log_info "Google Drive folder: $GDRIVE_FOLDER"
 fi
 
+# Verificar autenticación de Google Drive antes del backup
+if ! check_google_auth; then
+    log_error "Cannot proceed without valid Google Drive authentication"
+    exit 1
+fi
+
 # Ejecutar backup
 log_info "Starting backup process..."
 
-# Usar timeout para evitar que se cuelgue indefinidamente (30 minutos máximo)
-if timeout 1800 wp-backup backup --config-file "$CONFIG_FILE" >> "$LOG_FILE" 2>&1; then
+# Verificar si ya existe un token válido
+if [ ! -f "token.pickle" ]; then
+    log_warning "No Google Drive token found. Manual OAuth may be required."
+    log_info "Run 'wp-backup test' manually first to complete OAuth setup."
+fi
+
+# Usar timeout para evitar que se cuelgue indefinidamente (10 minutos máximo para cron)
+# Ejecutar en modo no interactivo para evitar prompts
+export PYTHONUNBUFFERED=1
+log_info "Timeout set to 10 minutes for automated execution"
+if timeout 600 wp-backup backup --config-file "$CONFIG_FILE" </dev/null >> "$LOG_FILE" 2>&1; then
     log_success "Backup completed successfully!"
     
     # Opcional: Limpiar logs antiguos (mantener últimos 30 días)
@@ -126,11 +165,19 @@ if timeout 1800 wp-backup backup --config-file "$CONFIG_FILE" >> "$LOG_FILE" 2>&
     exit 0
 else
     EXIT_CODE=$?
-    log_error "Backup failed with exit code: $EXIT_CODE"
+    if [ $EXIT_CODE -eq 124 ]; then
+        log_error "Backup timed out after 10 minutes"
+        log_info "This usually means:"
+        log_info "  • OAuth authentication is required (run 'wp-backup test' manually)"
+        log_info "  • Process is waiting for user input"
+        log_info "  • Large backup taking too long"
+    else
+        log_error "Backup failed with exit code: $EXIT_CODE"
+    fi
     
     # Mostrar las últimas líneas del log para debugging
-    log_error "Last 10 lines of output:"
-    tail -n 10 "$LOG_FILE" | while read line; do
+    log_error "Last 15 lines of output:"
+    tail -n 15 "$LOG_FILE" | while read line; do
         log_error "  $line"
     done
     
