@@ -188,13 +188,13 @@ class BackupOrchestrator:
             self.logger.warning(f"Local cleanup warning: {e}")
     
     def _cleanup_temp_directories(self) -> None:
-        """Limpia directorios temporales huérfanos de wp_backup_*"""
+        """Limpia directorios temporales huérfanos de wp_backup_* y wp-backup"""
         try:
-            # Buscar directorios temporales huérfanos en /tmp
+            # 1. Buscar directorios temporales de TemporaryDirectory (wp_backup_*)
             temp_dirs = glob.glob('/tmp/wp_backup_*')
             
             if temp_dirs:
-                self.logger.info(f"Found {len(temp_dirs)} temporary directories to clean")
+                self.logger.info(f"Found {len(temp_dirs)} wp_backup_* directories to clean")
                 
                 for temp_dir in temp_dirs:
                     try:
@@ -204,8 +204,30 @@ class BackupOrchestrator:
                     except Exception as e:
                         self.logger.warning(f"Could not remove {temp_dir}: {e}")
                 
-                self.logger.success(f"Cleaned {len(temp_dirs)} temporary directories")
-            else:
+                self.logger.success(f"Cleaned {len(temp_dirs)} wp_backup_* directories")
+            
+            # 2. Verificar directorio de backup local (/tmp/wp-backup)
+            wp_backup_dir = '/tmp/wp-backup'
+            if os.path.exists(wp_backup_dir) and os.path.isdir(wp_backup_dir):
+                # Solo limpiar si coincide con el BACKUP_DIR configurado o si parece temporal
+                config_backup_dir = str(self.config.wordpress.backup_dir)
+                if config_backup_dir == wp_backup_dir:
+                    # Es el directorio configurado, limpiar contenido pero mantener directorio
+                    try:
+                        for item in os.listdir(wp_backup_dir):
+                            item_path = os.path.join(wp_backup_dir, item)
+                            if os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
+                            else:
+                                os.remove(item_path)
+                        self.logger.info(f"Cleaned contents of backup directory: {wp_backup_dir}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not clean backup directory {wp_backup_dir}: {e}")
+                else:
+                    self.logger.warning(f"Found {wp_backup_dir} but configured BACKUP_DIR is {config_backup_dir}")
+                    self.logger.info("Manual cleanup may be needed: sudo rm -rf /tmp/wp-backup")
+            
+            if not temp_dirs and not os.path.exists(wp_backup_dir):
                 self.logger.info("No temporary directories found to clean")
                 
         except Exception as e:

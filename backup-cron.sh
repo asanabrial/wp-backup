@@ -52,18 +52,40 @@ cleanup() {
 
 # Función para limpiar directorios temporales huérfanos
 cleanup_temp_dirs() {
+    log_info "Cleaning temporary directories..."
+    
+    # 1. Limpiar directorios temporales de TemporaryDirectory (wp_backup_*)
     local temp_dirs=$(find /tmp -maxdepth 1 -name "wp_backup_*" -type d 2>/dev/null || true)
     if [ -n "$temp_dirs" ]; then
         local count=$(echo "$temp_dirs" | wc -l)
-        log_info "Cleaning $count temporary directories..."
+        log_info "Found $count wp_backup_* directories to clean"
         echo "$temp_dirs" | while read -r dir; do
             if [ -n "$dir" ] && [ -d "$dir" ]; then
+                local size=$(du -sh "$dir" 2>/dev/null | cut -f1 || echo "unknown")
                 rm -rf "$dir" 2>/dev/null || log_warning "Could not remove $dir"
-                log_info "Removed: $(basename "$dir")"
+                log_info "Removed: $(basename "$dir") ($size)"
             fi
         done
-        log_info "Temporary directories cleanup completed"
     fi
+    
+    # 2. Limpiar directorio de backup local si existe y está configurado en /tmp
+    if [ -d "/tmp/wp-backup" ]; then
+        local size=$(du -sh "/tmp/wp-backup" 2>/dev/null | cut -f1 || echo "unknown")
+        log_info "Found wp-backup directory ($size)"
+        
+        # Solo limpiar si parece ser un directorio temporal (no si es configuración del usuario)
+        local backup_dir_config=$(grep "^BACKUP_DIR=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "")
+        if [ "$backup_dir_config" = "/tmp/wp-backup" ]; then
+            log_info "BACKUP_DIR points to /tmp/wp-backup, cleaning contents but keeping directory"
+            rm -rf /tmp/wp-backup/* 2>/dev/null || log_warning "Could not clean /tmp/wp-backup contents"
+            log_info "Cleaned wp-backup directory contents"
+        else
+            log_warning "Found /tmp/wp-backup but BACKUP_DIR is '$backup_dir_config' - not cleaning automatically"
+            log_info "To clean manually: sudo rm -rf /tmp/wp-backup"
+        fi
+    fi
+    
+    log_info "Temporary directories cleanup completed"
 }
 
 # Configurar trap para limpieza
