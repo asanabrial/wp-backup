@@ -84,7 +84,7 @@ class WordPressProvider(BackupProvider):
                 return None
             
             # 2. Backup de base de datos
-            if not self._backup_database(db_file):
+            if not self._backup_database(db_file, temp_dir):
                 return None
             
             # 3. Crear archivo combinado
@@ -245,7 +245,7 @@ class WordPressProvider(BackupProvider):
             self.logger.error(f"Files backup failed: {e}")
             return False
     
-    def _backup_database(self, db_file: str) -> bool:
+    def _backup_database(self, db_file: str, temp_dir: str = None) -> bool:
         """Crea backup de base de datos"""
         try:
             self.logger.progress("Backing up database...", "💾")
@@ -253,20 +253,22 @@ class WordPressProvider(BackupProvider):
             if not self._db_credentials:
                 self.logger.error("No database credentials available")
                 return False
+
+            # Comando mysqldump con tmpdir personalizado
+            # Usar directorio temporal alternativo si se proporciona, sino usar /tmp
+            tmpdir = temp_dir if temp_dir else '/tmp'
             
-            # Comando mysqldump
             mysqldump_cmd = [
                 'mysqldump',
                 f'--host={self._db_credentials.host}',
                 f'--user={self._db_credentials.user}',
+                f'--tmpdir={tmpdir}',  # Usar directorio temporal con más espacio
                 '--single-transaction',
                 '--routines', 
                 '--triggers',
                 '--lock-tables=false',  # Evitar problemas con permisos
                 self._db_credentials.name
-            ]
-            
-            # Usar variable de entorno para password
+            ]            # Usar variable de entorno para password
             env = dict(os.environ, MYSQL_PWD=self._db_credentials.password)
             
             # Ejecutar mysqldump con compresión
