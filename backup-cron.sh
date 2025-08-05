@@ -116,7 +116,7 @@ fi
 log_info "Starting backup process..."
 
 # Usar timeout para evitar que se cuelgue indefinidamente (30 minutos máximo)
-if timeout 1800 wp-backup backup --config "$CONFIG_FILE" >> "$LOG_FILE" 2>&1; then
+if timeout 1800 wp-backup backup --config-file "$CONFIG_FILE" >> "$LOG_FILE" 2>&1; then
     log_success "Backup completed successfully!"
     
     # Opcional: Limpiar logs antiguos (mantener últimos 30 días)
