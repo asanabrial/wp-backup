@@ -200,13 +200,15 @@ else
     log_info "Using default config file (.env.local)"
 fi
 
-# Usar timeout para evitar que se cuelgue indefinidamente (10 minutos máximo para cron)
+# Usar timeout para evitar que se cuelgue indefinidamente (5 minutos para cron)
 # Ejecutar en modo no interactivo para evitar prompts
 export PYTHONUNBUFFERED=1
-log_info "Timeout set to 10 minutes for automated execution"
+export DEBIAN_FRONTEND=noninteractive
+log_info "Timeout set to 5 minutes for automated execution"
 log_info "Command: $BACKUP_CMD"
 
-if timeout 600 $BACKUP_CMD </dev/null >> "$LOG_FILE" 2>&1; then
+# Usar timeout con señal KILL para forzar terminación
+if timeout --signal=KILL 300 $BACKUP_CMD </dev/null >> "$LOG_FILE" 2>&1; then
     log_success "Backup completed successfully!"
     
     # Opcional: Limpiar logs antiguos (mantener últimos 30 días)
@@ -216,21 +218,34 @@ if timeout 600 $BACKUP_CMD </dev/null >> "$LOG_FILE" 2>&1; then
     exit 0
 else
     EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 124 ]; then
-        log_error "Backup timed out after 10 minutes"
+    if [ $EXIT_CODE -eq 124 ] || [ $EXIT_CODE -eq 137 ]; then
+        log_error "Backup timed out after 5 minutes"
         log_info "This usually means:"
-        log_info "  • OAuth authentication is required (run 'wp-backup test' manually)"
-        log_info "  • Process is waiting for user input"
+        log_info "  • Process is stuck waiting for user input"
+        log_info "  • MySQL authentication issues"
         log_info "  • Large backup taking too long"
+        log_info "  • OAuth authentication required"
+        
+        # Intentar obtener más información del proceso
+        log_info "Checking for hanging processes..."
+        pkill -f "wp-backup" 2>/dev/null || true
+        log_info "Killed any remaining wp-backup processes"
     else
         log_error "Backup failed with exit code: $EXIT_CODE"
     fi
     
     # Mostrar las últimas líneas del log para debugging
-    log_error "Last 15 lines of output:"
-    tail -n 15 "$LOG_FILE" | while read line; do
+    log_error "Last 20 lines of output:"
+    tail -n 20 "$LOG_FILE" | while read line; do
         log_error "  $line"
     done
+    
+    # Sugerencias específicas de debugging
+    log_info "Debugging suggestions:"
+    log_info "  1. Run manually: wp-backup test"
+    log_info "  2. Check MySQL: wp-backup test --test-wordpress"
+    log_info "  3. Check Google Drive: wp-backup test --test-gdrive"
+    log_info "  4. Check config: cat .env.local"
     
     exit $EXIT_CODE
 fi
