@@ -139,8 +139,33 @@ if ! command -v wp-backup &> /dev/null; then
 fi
 
 # Verificar instalación
-WP_BACKUP_VERSION=$(wp-backup --version 2>/dev/null || echo "unknown")
-log_info "wp-backup version: $WP_BACKUP_VERSION"
+# Note: wp-backup no tiene --version, usamos --help para verificar
+if wp-backup --help >/dev/null 2>&1; then
+    log_success "wp-backup command is working properly"
+    WP_BACKUP_VERSION="installed"
+else
+    log_error "wp-backup command is not working"
+    WP_BACKUP_VERSION="error"
+fi
+log_info "wp-backup status: $WP_BACKUP_VERSION"
+
+# Si hay problemas, intentar obtener más información
+if [ "$WP_BACKUP_VERSION" = "error" ]; then
+    log_warning "wp-backup command has issues"
+    log_info "Checking installation details..."
+    
+    # Verificar si el comando existe
+    WP_BACKUP_PATH=$(which wp-backup 2>/dev/null || echo "not found")
+    log_info "wp-backup path: $WP_BACKUP_PATH"
+    
+    log_info "Attempting reinstallation..."
+    if pip install -e . >> "$LOG_FILE" 2>&1; then
+        log_success "Reinstallation completed"
+    else
+        log_error "Reinstallation failed"
+        exit 1
+    fi
+fi
 
 # Cargar configuración para mostrar info
 if [ -f "$CONFIG_FILE" ]; then
