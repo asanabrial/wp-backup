@@ -254,22 +254,25 @@ class WordPressProvider(BackupProvider):
                 self.logger.error("No database credentials available")
                 return False
 
-            # Comando mysqldump con tmpdir personalizado
-            # Usar directorio temporal alternativo si se proporciona, sino usar /tmp
+            # Comando mysqldump con directorio temporal alternativo
+            # MySQL usa la variable de entorno TMPDIR, no el parámetro --tmpdir
             tmpdir = temp_dir if temp_dir else '/tmp'
             
             mysqldump_cmd = [
                 'mysqldump',
                 f'--host={self._db_credentials.host}',
                 f'--user={self._db_credentials.user}',
-                f'--tmpdir={tmpdir}',  # Usar directorio temporal con más espacio
                 '--single-transaction',
                 '--routines', 
                 '--triggers',
                 '--lock-tables=false',  # Evitar problemas con permisos
                 self._db_credentials.name
-            ]            # Usar variable de entorno para password
-            env = dict(os.environ, MYSQL_PWD=self._db_credentials.password)
+            ]
+            
+            # Usar variable de entorno para password Y para tmpdir
+            env = dict(os.environ, 
+                      MYSQL_PWD=self._db_credentials.password,
+                      TMPDIR=tmpdir)  # MySQL usa TMPDIR en lugar de --tmpdir
             
             # Ejecutar mysqldump con compresión
             with open(db_file, 'wb') as f:
