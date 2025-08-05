@@ -123,10 +123,23 @@ fi
 # Verificar que wp-backup está disponible
 if ! command -v wp-backup &> /dev/null; then
     log_error "wp-backup command not found!"
-    log_info "Make sure the tool is installed:"
-    log_info "  pip install -e ."
-    exit 1
+    log_info "Attempting to install/reinstall..."
+    
+    # Intentar instalar automáticamente
+    if pip install -e . >> "$LOG_FILE" 2>&1; then
+        log_success "wp-backup installed successfully"
+    else
+        log_error "Installation failed. Manual steps required:"
+        log_info "  1. source venv/bin/activate"
+        log_info "  2. pip install --upgrade pip"
+        log_info "  3. pip install -e ."
+        exit 1
+    fi
 fi
+
+# Verificar instalación
+WP_BACKUP_VERSION=$(wp-backup --version 2>/dev/null || echo "unknown")
+log_info "wp-backup version: $WP_BACKUP_VERSION"
 
 # Cargar configuración para mostrar info
 if [ -f "$CONFIG_FILE" ]; then
