@@ -46,6 +46,24 @@ cleanup() {
         rm -f "$LOCK_FILE"
         log_info "Lock file removed"
     fi
+    # Limpiar directorios temporales huérfanos
+    cleanup_temp_dirs
+}
+
+# Función para limpiar directorios temporales huérfanos
+cleanup_temp_dirs() {
+    local temp_dirs=$(find /tmp -maxdepth 1 -name "wp_backup_*" -type d 2>/dev/null || true)
+    if [ -n "$temp_dirs" ]; then
+        local count=$(echo "$temp_dirs" | wc -l)
+        log_info "Cleaning $count temporary directories..."
+        echo "$temp_dirs" | while read -r dir; do
+            if [ -n "$dir" ] && [ -d "$dir" ]; then
+                rm -rf "$dir" 2>/dev/null || log_warning "Could not remove $dir"
+                log_info "Removed: $(basename "$dir")"
+            fi
+        done
+        log_info "Temporary directories cleanup completed"
+    fi
 }
 
 # Configurar trap para limpieza
@@ -65,6 +83,9 @@ fi
 
 # Crear lock file
 echo $$ > "$LOCK_FILE"
+
+# Limpiar directorios temporales huérfanos al inicio
+cleanup_temp_dirs
 
 # Crear directorio de logs si no existe
 mkdir -p "$SCRIPT_DIR/logs"

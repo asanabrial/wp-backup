@@ -2,6 +2,9 @@
 Simplified backup orchestrator with better error handling
 """
 
+import glob
+import os
+import shutil
 import time
 from datetime import datetime
 from tempfile import TemporaryDirectory
@@ -36,6 +39,9 @@ class BackupOrchestrator:
             self.logger.progress("Starting WordPress backup...", "🚀")
             self.logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", "📅")
             
+            # 0. Limpiar directorios temporales huérfanos del inicio
+            self._cleanup_temp_directories()
+            
             # 1. Validar configuración
             if not self._validate_setup():
                 result.error = "Setup validation failed"
@@ -47,32 +53,48 @@ class BackupOrchestrator:
                 return result
             
             # 3. Crear backup
-            with TemporaryDirectory(prefix='wp_backup_') as temp_dir:
-                self.logger.info(f"Working directory: {temp_dir}", "📁")
-                
-                backup_file = self.backup_provider.create_backup(temp_dir)
-                if not backup_file:
-                    result.error = "Backup creation failed"
-                    return result
-                
-                # 4. Upload a almacenamiento
-                file_id = self.storage_provider.upload(backup_file)
-                if not file_id:
-                    result.error = "Upload failed"
-                    return result
-                
-                # 5. Configurar permisos
-                self.storage_provider.configure_access(self.config.sharing)
-                
-                # 6. Limpieza de archivos antiguos
-                cleaned = self.storage_provider.cleanup_old_files(self.config.google_drive.retention_days)
-                
-                # 7. Preparar resultado exitoso
-                result.success = True
-                result.backup_id = file_id
-                result.files_cleaned = cleaned
-                result.duration = time.time() - start_time
-                result.backup_size = get_file_size(backup_file)
+            temp_dir_path = None
+            try:
+                with TemporaryDirectory(prefix='wp_backup_') as temp_dir:
+                    temp_dir_path = temp_dir  # Guardar referencia para limpieza de emergencia
+                    self.logger.info(f"Working directory: {temp_dir}", "📁")
+                    
+                    backup_file = self.backup_provider.create_backup(temp_dir)
+                    if not backup_file:
+                        result.error = "Backup creation failed"
+                        return result
+                    
+                    # 4. Upload a almacenamiento
+                    file_id = self.storage_provider.upload(backup_file)
+                    if not file_id:
+                        result.error = "Upload failed"
+                        return result
+                    
+                    # 5. Configurar permisos
+                    self.storage_provider.configure_access(self.config.sharing)
+                    
+                    # 6. Limpieza de archivos antiguos
+                    cleaned = self.storage_provider.cleanup_old_files(self.config.google_drive.retention_days)
+                    
+                    # 7. Preparar resultado exitoso
+                    result.success = True
+                    result.backup_id = file_id
+                    result.files_cleaned = cleaned
+                    result.duration = time.time() - start_time
+                    result.backup_size = get_file_size(backup_file)
+                    
+                    # Marcar temp_dir_path como None ya que se limpió correctamente
+                    temp_dir_path = None
+                    
+            except Exception as temp_exception:
+                # Si hay un error y el directorio temporal no se limpió, intentar limpieza manual
+                if temp_dir_path and os.path.exists(temp_dir_path):
+                    try:
+                        shutil.rmtree(temp_dir_path)
+                        self.logger.info(f"Emergency cleanup of temp directory: {os.path.basename(temp_dir_path)}")
+                    except Exception as cleanup_ex:
+                        self.logger.warning(f"Could not cleanup temp directory {temp_dir_path}: {cleanup_ex}")
+                raise temp_exception
         
         except Exception as e:
             result.error = self.secret_manager.mask_sensitive_data(str(e))
@@ -143,11 +165,11 @@ class BackupOrchestrator:
         self.logger.info("   • Local storage: None (temporary only)")
     
     def _cleanup_local_files(self) -> None:
-        """Limpia archivos locales"""
+        """Limpia archivos locales y directorios temporales huérfanos"""
         try:
             self.logger.progress("Cleaning up local files...", "🧹")
             
-            # Limpiar directorio de backup si está vacío
+            # 1. Limpiar directorio de backup si está vacío
             if self.config.wordpress.backup_dir.exists():
                 try:
                     # Solo eliminar si está vacío
@@ -157,10 +179,37 @@ class BackupOrchestrator:
                 except OSError:
                     pass  # Directorio no está vacío, está bien
             
+            # 2. Limpiar directorios temporales huérfanos de wp_backup_*
+            self._cleanup_temp_directories()
+            
             self.logger.success("Local cleanup completed")
             
         except Exception as e:
             self.logger.warning(f"Local cleanup warning: {e}")
+    
+    def _cleanup_temp_directories(self) -> None:
+        """Limpia directorios temporales huérfanos de wp_backup_*"""
+        try:
+            # Buscar directorios temporales huérfanos en /tmp
+            temp_dirs = glob.glob('/tmp/wp_backup_*')
+            
+            if temp_dirs:
+                self.logger.info(f"Found {len(temp_dirs)} temporary directories to clean")
+                
+                for temp_dir in temp_dirs:
+                    try:
+                        if os.path.isdir(temp_dir):
+                            shutil.rmtree(temp_dir)
+                            self.logger.info(f"Removed temporary directory: {os.path.basename(temp_dir)}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not remove {temp_dir}: {e}")
+                
+                self.logger.success(f"Cleaned {len(temp_dirs)} temporary directories")
+            else:
+                self.logger.info("No temporary directories found to clean")
+                
+        except Exception as e:
+            self.logger.warning(f"Temporary directory cleanup failed: {e}")
     
     def print_summary(self, result: BackupResult) -> None:
         """Imprime resumen final"""
