@@ -101,12 +101,13 @@ check_google_auth() {
     fi
     
     # Verificar si el token funciona (test rápido sin output)
-    if timeout 60 wp-backup test --config-file "$CONFIG_FILE" >/dev/null 2>&1; then
+    # El comando test no acepta --config-file, usa .env.local por defecto
+    if timeout 60 wp-backup test >/dev/null 2>&1; then
         log_success "Google Drive authentication verified"
         return 0
     else
         log_warning "Google Drive token may be expired or invalid"
-        log_info "Try running: wp-backup test --config-file $CONFIG_FILE"
+        log_info "Try running: wp-backup test"
         return 1
     fi
 }
@@ -164,11 +165,23 @@ if [ ! -f "token.pickle" ]; then
     log_info "Run 'wp-backup test' manually first to complete OAuth setup."
 fi
 
+# Detectar el parámetro correcto para configuración
+BACKUP_CMD="wp-backup backup"
+if [ "$CONFIG_FILE" != ".env.local" ]; then
+    # Si no es el archivo por defecto, intentar con --config-file
+    log_info "Using config file: $CONFIG_FILE"
+    BACKUP_CMD="$BACKUP_CMD --config-file $CONFIG_FILE"
+else
+    log_info "Using default config file (.env.local)"
+fi
+
 # Usar timeout para evitar que se cuelgue indefinidamente (10 minutos máximo para cron)
 # Ejecutar en modo no interactivo para evitar prompts
 export PYTHONUNBUFFERED=1
 log_info "Timeout set to 10 minutes for automated execution"
-if timeout 600 wp-backup backup --config-file "$CONFIG_FILE" </dev/null >> "$LOG_FILE" 2>&1; then
+log_info "Command: $BACKUP_CMD"
+
+if timeout 600 $BACKUP_CMD </dev/null >> "$LOG_FILE" 2>&1; then
     log_success "Backup completed successfully!"
     
     # Opcional: Limpiar logs antiguos (mantener últimos 30 días)
