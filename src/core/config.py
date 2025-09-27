@@ -47,6 +47,9 @@ class GoogleDriveConfig(BaseModel):
     folder: str = Field(..., description="Google Drive backup folder path")
     credentials_file: Path = Field(..., description="OAuth credentials JSON file path")
     retention_days: int = Field(default=7, ge=1, le=365, description="Days to retain backups")
+    auto_refresh: bool = Field(default=True, description="Enable automatic token refresh")
+    refresh_threshold_minutes: int = Field(default=5, ge=1, le=60, description="Refresh token when expires in N minutes")
+    force_refresh_on_start: bool = Field(default=False, description="Force token refresh on every authentication")
 
     @field_validator('folder')
     @classmethod

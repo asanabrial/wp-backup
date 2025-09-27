@@ -35,42 +35,21 @@ class GoogleDriveProvider(StorageProvider):
         self.folder_id = None
     
     def authenticate(self) -> bool:
-        """Autentica con Google Drive usando OAuth 2.0 de forma segura"""
+        """Autentica con Google Drive usando OAuth 2.0 de forma segura con refresh automático"""
         try:
-            creds = None
+            creds = self._load_existing_credentials()
             
-            # Cargar token existente
-            if os.path.exists(self.TOKEN_FILE):
-                try:
-                    with open(self.TOKEN_FILE, 'rb') as token:
-                        creds = pickle.load(token)
-                except Exception as e:
-                    self.logger.warning(f"Error loading existing token: {e}")
-                    # Si hay error cargando token, continúa para regenerarlo
-                    creds = None
-            
-            # Si no hay credenciales válidas, ejecutar flujo OAuth
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    try:
-                        self.logger.info("Refreshing access token...")
-                        creds.refresh(Request())
-                        self.logger.success("Access token refreshed")
-                    except Exception as e:
-                        self.logger.warning(f"Error refreshing token: {e}")
-                        creds = None
+            # Validar y refrescar credenciales si es necesario
+            if not self._validate_and_refresh_credentials(creds):
+                # Si no se pueden refrescar, ejecutar flujo OAuth completo
+                if not self._run_oauth_flow():
+                    return False
                 
+                # Recargar credenciales después del flujo OAuth
+                creds = self._load_existing_credentials()
                 if not creds:
-                    if not self._run_oauth_flow():
-                        return False
-                    
-                    # Recargar credenciales después del flujo OAuth
-                    if os.path.exists(self.TOKEN_FILE):
-                        with open(self.TOKEN_FILE, 'rb') as token:
-                            creds = pickle.load(token)
-                    else:
-                        self.logger.error("OAuth flow completed but no token file created")
-                        return False
+                    self.logger.error("OAuth flow completed but no valid credentials available")
+                    return False
             
             # Crear servicio de Google Drive
             self.service = build('drive', 'v3', credentials=creds)
@@ -87,8 +66,155 @@ class GoogleDriveProvider(StorageProvider):
             self.logger.error(f"Google Drive authentication failed: {masked_error}")
             return False
     
+    def _load_existing_credentials(self) -> Optional[Credentials]:
+        """Carga credenciales existentes desde el archivo token"""
+        if not os.path.exists(self.TOKEN_FILE):
+            return None
+            
+        try:
+            with open(self.TOKEN_FILE, 'rb') as token:
+                creds = pickle.load(token)
+                return creds
+        except Exception as e:
+            self.logger.warning(f"Error loading existing token: {e}")
+            return None
+    
+    def _validate_and_refresh_credentials(self, creds: Optional[Credentials]) -> bool:
+        """Valida credenciales y las refresca automáticamente si es necesario"""
+        if not creds:
+            self.logger.info("No existing credentials found")
+            return False
+        
+        # Si la renovación automática está deshabilitada, solo verificar validez
+        if not self.config.auto_refresh:
+            if creds.valid:
+                self.logger.info("Existing credentials are valid (auto-refresh disabled)")
+                return True
+            else:
+                self.logger.info("Credentials invalid and auto-refresh disabled - need new authorization")
+                return False
+        
+        # Forzar refresh si está configurado
+        if self.config.force_refresh_on_start and creds.refresh_token:
+            self.logger.info("🔄 Force refresh on start enabled")
+            return self._refresh_access_token(creds)
+        
+        # Si las credenciales son válidas, verificar si necesitan renovación preventiva
+        if creds.valid:
+            if creds.expiry:
+                time_to_expiry = (creds.expiry - datetime.now()).total_seconds() / 60  # en minutos
+                if time_to_expiry < self.config.refresh_threshold_minutes and creds.refresh_token:
+                    self.logger.info(f"🔄 Token expires in {time_to_expiry:.1f} minutes - refreshing preventively")
+                    return self._refresh_access_token(creds)
+            
+            self.logger.info("Existing credentials are valid")
+            return True
+        
+        # Si están expiradas pero tenemos refresh_token, intentar refrescar
+        if creds.expired and creds.refresh_token:
+            return self._refresh_access_token(creds)
+        
+        # Si no hay refresh_token o no están simplemente expiradas
+        self.logger.info("Credentials cannot be refreshed - need new authorization")
+        return False
+    
+    def _refresh_access_token(self, creds: Credentials) -> bool:
+        """Refresca el access token usando el refresh token"""
+        try:
+            self.logger.info("🔄 Refreshing access token...")
+            
+            # Intentar refrescar el token
+            creds.refresh(Request())
+            
+            # Guardar las credenciales actualizadas
+            self._save_credentials(creds)
+            
+            # Verificar que el token funciona
+            if creds.valid:
+                self.logger.success("✅ Access token refreshed successfully")
+                self.logger.info(f"   🕒 Token expires: {creds.expiry.strftime('%Y-%m-%d %H:%M:%S UTC') if creds.expiry else 'Unknown'}")
+                return True
+            else:
+                self.logger.warning("⚠️ Token refresh completed but credentials still not valid")
+                return False
+                
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            if "invalid_grant" in error_msg or "token_expired" in error_msg:
+                self.logger.warning("🔄 Refresh token has expired - new authorization required")
+                self.logger.info("   💡 This is normal after long periods of inactivity")
+            elif "invalid_client" in error_msg:
+                self.logger.warning("❌ OAuth client configuration issue")
+                self.logger.info("   💡 Check your Google Cloud Console OAuth settings")
+            else:
+                self.logger.warning(f"⚠️ Error refreshing token: {e}")
+            
+            return False
+    
+    def _save_credentials(self, creds: Credentials) -> bool:
+        """Guarda credenciales al archivo token de forma segura"""
+        try:
+            # Crear backup del token anterior si existe
+            if os.path.exists(self.TOKEN_FILE):
+                backup_file = f"{self.TOKEN_FILE}.backup"
+                try:
+                    os.rename(self.TOKEN_FILE, backup_file)
+                except Exception:
+                    pass  # Si no se puede hacer backup, continuar
+            
+            # Guardar nuevas credenciales
+            with open(self.TOKEN_FILE, 'wb') as token:
+                pickle.dump(creds, token)
+            
+            self.logger.info("💾 Credentials saved successfully")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error saving credentials: {e}")
+            return False
+    
+    def _ensure_valid_credentials(self) -> bool:
+        """Asegura que las credenciales estén válidas antes de operaciones críticas"""
+        if not self.service:
+            return False
+        
+        # Si la renovación automática está deshabilitada, solo verificar validez básica
+        if not self.config.auto_refresh:
+            try:
+                # Hacer una llamada simple para verificar que funcionan
+                self.service.about().get(fields="user").execute()
+                return True
+            except Exception as e:
+                self.logger.warning(f"Credentials validation failed: {e}")
+                return False
+        
+        try:
+            # Obtener credenciales del servicio
+            creds = self.service._http.credentials if hasattr(self.service, '_http') else None
+            
+            if not creds:
+                self.logger.warning("No credentials available in service")
+                return False
+            
+            # Si el token expira en menos del umbral configurado, refrescarlo preventivamente
+            if creds.expiry and creds.expired:
+                self.logger.info("🔄 Token expired, refreshing before operation...")
+                return self._refresh_access_token(creds)
+            elif creds.expiry:
+                time_to_expiry = (creds.expiry - datetime.now()).total_seconds() / 60  # en minutos
+                if time_to_expiry < self.config.refresh_threshold_minutes:
+                    self.logger.info(f"🔄 Token expires in {time_to_expiry:.1f} minutes, refreshing preventively...")
+                    return self._refresh_access_token(creds)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Error validating credentials: {e}")
+            return False
+    
     def _run_oauth_flow(self) -> bool:
-        """Ejecuta flujo OAuth 2.0 de forma segura"""
+        """Ejecuta flujo OAuth 2.0 de forma segura con refresh tokens"""
         try:
             if not self.config.credentials_file.exists():
                 self.logger.error(f"Credentials file not found: {self.config.credentials_file}")
@@ -100,6 +226,9 @@ class GoogleDriveProvider(StorageProvider):
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(self.config.credentials_file), self.SCOPES
             )
+            
+            # Configurar para obtener refresh tokens
+            flow.authorization_url_options = {'access_type': 'offline', 'prompt': 'consent'}
             
             # Ejecutar flujo OAuth 2.0
             # Detectar si estamos en VPS/servidor (sin DISPLAY)
@@ -123,9 +252,21 @@ class GoogleDriveProvider(StorageProvider):
                     
                     self.logger.info("🔄 Switching to manual authorization flow...")
                     creds = self._manual_oauth_flow(flow)
+            
+            # Verificar que obtenemos refresh token
+            if not creds.refresh_token:
+                self.logger.warning("⚠️ No refresh token received")
+                self.logger.info("   💡 This might happen if you've already authorized this app")
+                self.logger.info("   💡 To force refresh token, revoke access in Google Account settings")
+                self.logger.info("   💡 Go to: https://myaccount.google.com/permissions")
+                # Continuar de todos modos, el token de acceso actual funcionará
+            else:
+                self.logger.success("✅ Refresh token obtained - automatic renewal enabled")
+            
             # Guardar token para uso futuro
-            with open(self.TOKEN_FILE, 'wb') as token:
-                pickle.dump(creds, token)
+            if not self._save_credentials(creds):
+                self.logger.error("Failed to save credentials")
+                return False
             
             self.logger.success("OAuth 2.0 flow completed successfully")
             self.logger.info("Token saved for future use")
@@ -137,20 +278,26 @@ class GoogleDriveProvider(StorageProvider):
             return False
     
     def _manual_oauth_flow(self, flow):
-        """Ejecuta flujo OAuth manual para VPS/servidores"""
+        """Ejecuta flujo OAuth manual para VPS/servidores con refresh tokens"""
         # Para servidores sin navegador - configurar redirect_uri apropiado
         flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
-        auth_url, _ = flow.authorization_url(prompt='consent')
+        
+        # Generar URL con parámetros para refresh tokens
+        auth_url, _ = flow.authorization_url(
+            prompt='consent',
+            access_type='offline'
+        )
         
         print("\n" + "="*60)
         print("🔐 GOOGLE DRIVE AUTHORIZATION REQUIRED")
         print("="*60)
         print("⚠️ VPS/Remote server detected - using manual authorization")
+        print("🔄 Requesting refresh token for automatic renewal")
         print()
         print("📱 On your computer/phone:")
         print(f"   1. Open: {auth_url}")
         print("   2. Sign in with Google")
-        print("   3. Click 'Allow'")
+        print("   3. Click 'Allow' (accept all permissions)")
         print()
         print("💻 After authorization, you'll see:")
         print("   ┌─────────────────────────────────────┐")
@@ -206,6 +353,60 @@ class GoogleDriveProvider(StorageProvider):
         self.logger.info("   5. In 'OAuth consent screen' > 'Test users': Add your email")
         self.logger.info("   6. Save JSON as config/gdrive-credentials.json")
     
+    def get_token_status(self) -> Dict[str, Any]:
+        """Obtiene información del estado actual del token"""
+        try:
+            creds = self._load_existing_credentials()
+            
+            if not creds:
+                return {
+                    "exists": False,
+                    "valid": False,
+                    "has_refresh_token": False,
+                    "message": "No token file found"
+                }
+            
+            status = {
+                "exists": True,
+                "valid": creds.valid,
+                "expired": creds.expired,
+                "has_refresh_token": bool(creds.refresh_token),
+                "auto_refresh_enabled": self.config.auto_refresh,
+                "refresh_threshold_minutes": self.config.refresh_threshold_minutes
+            }
+            
+            if creds.expiry:
+                status["expires_at"] = creds.expiry.isoformat()
+                time_to_expiry = (creds.expiry - datetime.now()).total_seconds()
+                status["expires_in_seconds"] = max(0, time_to_expiry)
+                status["expires_in_minutes"] = max(0, time_to_expiry / 60)
+            
+            # Determinar mensaje de estado
+            if creds.valid:
+                if creds.expiry:
+                    time_to_expiry_min = (creds.expiry - datetime.now()).total_seconds() / 60
+                    if time_to_expiry_min < self.config.refresh_threshold_minutes:
+                        status["message"] = f"Token expires soon ({time_to_expiry_min:.1f}min) - will auto-refresh"
+                    else:
+                        status["message"] = f"Token valid for {time_to_expiry_min:.1f} more minutes"
+                else:
+                    status["message"] = "Token is valid"
+            elif creds.refresh_token:
+                status["message"] = "Token expired but can be refreshed automatically"
+            else:
+                status["message"] = "Token expired and no refresh token available - need re-authorization"
+            
+            return status
+            
+        except Exception as e:
+            return {
+                "exists": False,
+                "valid": False,
+                "has_refresh_token": False,
+                "error": str(e),
+                "message": f"Error checking token status: {e}"
+            }
+    
     def _test_connection(self) -> bool:
         """Prueba conexión con Google Drive"""
         try:
@@ -224,11 +425,18 @@ class GoogleDriveProvider(StorageProvider):
             return False
     
     def upload(self, file_path: str) -> Optional[str]:
-        """Sube archivo a Google Drive"""
+        """Sube archivo a Google Drive con validación automática de tokens"""
         try:
             if not self.service:
                 self.logger.error("Not authenticated with Google Drive")
                 return None
+            
+            # Validar credenciales antes de la operación crítica
+            if not self._ensure_valid_credentials():
+                self.logger.warning("Failed to ensure valid credentials, attempting re-authentication...")
+                if not self.authenticate():
+                    self.logger.error("Re-authentication failed")
+                    return None
             
             # Asegurar que tenemos la carpeta de backup
             if not self.folder_id:
@@ -408,8 +616,13 @@ class GoogleDriveProvider(StorageProvider):
             return False
     
     def cleanup_old_files(self, retention_days: int) -> int:
-        """Limpia archivos antiguos"""
+        """Limpia archivos antiguos con validación de tokens"""
         try:
+            # Validar credenciales antes de la operación
+            if not self._ensure_valid_credentials():
+                self.logger.warning("Failed to ensure valid credentials for cleanup")
+                return 0
+            
             self.logger.progress(f"Cleaning up old backups (>{retention_days} days)...", "🧹")
             
             if not self.folder_id:
